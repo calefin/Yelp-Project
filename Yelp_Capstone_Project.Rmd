@@ -1,0 +1,207 @@
+---
+title: "Yelp Capstone Project"
+author: "Calefi, AS"
+date: "21 de novembro de 2015"
+output: word_document
+---
+
+## Introduction
+
+This work is part of the capstone project from the Data Science Specialization by Coursera. This project aims to analyse the Yelp Dataset Challenge to find the words related to worst comments, identify them and find associations. With this type of information we can build algorithims to predict bad evaluations and find establishments problems in the start. Yelp is a website founded in 2004 to help people to find local business. People can create an free account and rate the visited business by one to five stars and make a review of each establishment. We use that type of information to text mining and preferences projections.
+
+##Methods and Results
+
+###Data read
+First we need to load .JSON files and transform them to work into R. To gain some time the workspace was created and saved to load fast when restart R session.
+
+- Set the work directory properly before run the functions.
+
+```{r, echo=FALSE}
+setwd("~/Atilio/Capstone")
+require(rjson)
+require(BBmisc)
+require(dplyr)
+require(stringr)
+```
+
+- Download and read files.
+
+```{r, eval=FALSE}
+download.file('https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/yelp_dataset_challenge_academic_dataset.zip', destfile=paste0(getwd(),'/yelp.zip'))
+
+unzip(paste0(getwd(),'/yelp_data.zip'))
+
+file.remove(paste0(getwd(),'/yelp_data.zip'))
+```
+
+- Create the work space to load and reload the dataset fast.
+
+```{r, eval=FALSE}
+frame.names <- c('business','checkin','review','tip','user')
+jfile <- paste0(getwd(),'/yelp_dataset_challenge/yelp_dataset_',frame.names,'.json')
+
+data <- llply(as.list(jfile), function(x) stream_in(file(x),pagesize = 10000))
+
+names(dat) <- frame.names
+
+save.image(paste0(getwd(),'/Capstone_Project.RData'))
+
+load(paste0(getwd(),'/Capstone_Project.RData'))
+```
+
+###Transform data
+
+- This step we have to select only data relevat to our work. First we have to select just the review informations from yelp costumers.
+
+```{r, eval=FALSE}
+reviews <- data[['review']]
+
+```
+
+- Now we will change the stars ratings to factors to classify texts according to quality classifications. After, tabulation will be changed to data.frame and columns names will be change to clear names.
+
+```{r, echo=TRUE}
+reviews$stars <-as.factor(reviews$stars)
+
+f.review <-data.frame(reviews$stars, reviews$text, reviews$user_id)
+
+names(f.review)<-c("stars","text", "user_id")
+```
+
+- This steps we will create the subsets of texts to each star rating (one to three stars). We take into account that one to three stars as bad evaluations.
+
+```{r}
+f.review.1st <- f.review[f.review$stars==1, ]
+f.review.1st$text <- as.character(f.review.1st$text)
+f.review.2st <- f.review[f.review$stars==2, ]
+f.review.2st$text <- as.character(f.review.2st$text)
+f.review.3rd <- f.review[f.review$stars==3, ]
+f.review.3rd$text <- as.character(f.review.3rd$text)
+```
+
+- To work with the text we will use the `tm` package, a package used to text mining in R with many functions implemented. The first step is convert each star into `VCorpus` format. Second, we will clean the data to reduce the size of the data and working time. This way we wihdraw the whitespaces, transform words to lower case, remove numbers, punctuations and stopwords, and finnaly we apply the Porter`s stemming algorithm.
+
+```{r}
+require(tm)
+
+one.star <-  VCorpus(VectorSource(f.review.1st$text),
+                     readerControl = list(language = "en"))
+
+one.star <- tm_map(one.star, stripWhitespace)
+one.star <- tm_map(one.star, content_transformer(tolower))
+one.star <- tm_map(one.star, removeNumbers)
+one.star <- tm_map(one.star, removePunctuation)
+one.star <- tm_map(one.star, removeWords, stopwords("english"))
+one.star <- tm_map(one.star, stemDocument)
+
+# Work done with other stars (two.star and three.star)
+
+```
+
+```{r, echo=FALSE}
+two.star <-  VCorpus(VectorSource(f.review.2st$text),
+                     readerControl = list(language = "en"))
+
+two.star <- tm_map(two.star, stripWhitespace)
+two.star <- tm_map(two.star, content_transformer(tolower))
+two.star <- tm_map(two.star, removeNumbers)
+two.star <- tm_map(two.star, removePunctuation)
+two.star <- tm_map(two.star, removeWords, stopwords("english"))
+two.star <- tm_map(two.star, stemDocument)
+
+three.star <-  VCorpus(VectorSource(f.review.3rd$text),
+                     readerControl = list(language = "en"))
+
+three.star <- tm_map(three.star, stripWhitespace)
+three.star <- tm_map(three.star, content_transformer(tolower))
+three.star <- tm_map(three.star, removeNumbers)
+three.star <- tm_map(three.star, removePunctuation)
+three.star <- tm_map(three.star, removeWords, stopwords("english"))
+three.star <- tm_map(three.star, stemDocument)
+```
+
+- Next step is convert the Corpus to TermDocumentMatrix, so we can compute the term frequencies by `findFreqTerms()`. Low frequencies terms were discarted, we want to know "bad terms" with high frequency. 
+
+```{r}
+
+tdm1 <- TermDocumentMatrix(one.star)
+tdm2 <- TermDocumentMatrix(two.star)
+tdm3 <- TermDocumentMatrix(three.star)
+
+freqterm1 <- findFreqTerms(tdm1, lowfreq = 20000, highfreq = Inf)
+freqterm2 <- findFreqTerms(tdm2, lowfreq = 20000, highfreq = Inf)
+freqterm3 <- findFreqTerms(tdm3, lowfreq = 20000, highfreq = Inf)
+```
+
+- Visualization of the correlations within a term-document matrix with one star rating.
+
+```{r}
+plot(tdm1, terms = freqterm1[1:25], corThreshold = 0.15)
+```
+
+- Visualization of the correlations within a term-document matrix with two star rating
+
+```{r}
+plot(tdm2, terms = freqterm2[1:25], corThreshold = 0.15)
+```
+
+- Visualization of the correlations within a term-document matrix with three star rating
+
+```{r}
+plot(tdm3, terms = freqterm3[1:25], corThreshold = 0.15)
+```
+
+- We can see that the word *bad* has high frequency in all reviews, so we can use this word as an indicator of the quality of the work. Although we can't find a high correlation of this word to another words, it's possible to do another analysis. Other options of more complex approaches, taking into account the combination of words is to use **Weka** or **OpenNLP** both implemented in *R*. To perform N-Gram Tokenization you must have a better computer to do the computations, so better calculations require phisical RAM memory and processor.
+
+Another visual approach to see the word frequencies is a wordcloud graph. We compute the frequencies and plot them using the package `wordcloud`. Biggest words represents high frequencies. To make the wordcloud we passed the function `removeSparseTerms()` to compute words wich have at leat 85% sparse.
+
+```{r, echo=FALSE}
+rm(tdm1,tdm2, tdm3)
+```
+
+```{r}
+require(wordcloud)
+
+pal <- brewer.pal(8,"Dark2")
+
+dtm1 <- DocumentTermMatrix(one.star)
+dtm2 <- DocumentTermMatrix(two.star)
+dtm3 <- DocumentTermMatrix(three.star)
+```
+
+- Wordcloud of word frequencies from one star reviews.
+
+```{r, echo=FALSE}
+dtm1 <- removeSparseTerms(dtm1, 0.90)
+dtm1 <- as.matrix(dtm1)
+frequency1 <- colSums(dtm1)
+frequency1 <- sort(frequency1, decreasing=TRUE)
+words1 <- names(frequency1)
+wordcloud(words1, frequency1, colors = pal)
+```
+
+- Wordcloud of word frequencies from two star reviews.
+
+```{r, echo=FALSE}
+dtm2 <- removeSparseTerms(dtm2, 0.90)
+dtm2 <- as.matrix(dtm2)
+frequency2 <- colSums(dtm2)
+frequency2 <- sort(frequency2, decreasing=TRUE)
+words2 <- names(frequency2)
+wordcloud(words2, frequency2, colors = pal)
+```
+
+- Wordcloud of word frequencies from three star reviews.
+
+```{r, echo=FALSE}
+dtm3 <- removeSparseTerms(dtm3, 0.90)
+dtm3 <- as.matrix(dtm3)
+frequency3 <- colSums(dtm3)
+frequency3 <- sort(frequency3, decreasing=TRUE)
+words3 <- names(frequency3)
+wordcloud(words3, frequency3, colors = pal)
+```
+
+## Conclusions
+
+We can perform a basic word clean and frequency determination taking into account how sparse was the word into each star rating. A primary approach show us that "bad" is a keyword related with this task, but we can`t find a hisgh correlation with other words. N-gram tokenization may improve the results finding the relation between words. With this type of information we can start to apply an machine learning algorithm to predict the costumer rating based at the words inside the reviews.
